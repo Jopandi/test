@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horda de Zumbis</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+<script>
+    const config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        scene: {
+            preload: preload,
+            create: create,
+            update: update,
+        },
+        physics: {
+            default: 'arcade',
+            arcade: {
+                debug: false,
+            },
+        },
+    };
+
+    const game = new Phaser.Game(config);
+
+    let player, cursors, bullets, zombies, healthItems;
+    let scoreText, healthText, hordeText;
+    let score = 0, health = 100, horde = 1, zombiesRemaining;
+    let lastBulletTime = 0, lastHordeTime = 0;
+
+    function preload() {
+        this.load.image('player', 'assets/jogador.png');
+        this.load.image('zombie', 'assets/zumbi.png');
+        this.load.image('bullet', 'assets/bala.png');
+        this.load.image('health', 'assets/cura.png');
+    }
+
+    function create() {
+        // Jogador
+        player = this.physics.add.sprite(400, 300, 'player');
+        player.setCollideWorldBounds(true);
+
+        // Grupos
+        bullets = this.physics.add.group();
+        zombies = this.physics.add.group();
+        healthItems = this.physics.add.group();
+
+        // Controles
+        cursors = this.input.keyboard.createCursorKeys();
+        this.input.on('pointerdown', shootBullet, this);
+
+        // UI
+        scoreText = this.add.text(10, 10, 'Score: 0', { fontSize: '20px', fill: '#fff' });
+        healthText = this.add.text(10, 40, 'Health: 100', { fontSize: '20px', fill: '#fff' });
+        hordeText = this.add.text(10, 70, 'Horde: 1', { fontSize: '20px', fill: '#fff' });
+
+        startNewHorde(this);
+    }
+
+    function update() {
+        // Movimento do jogador
+        if (cursors.up.isDown) player.setVelocityY(-200);
+        else if (cursors.down.isDown) player.setVelocityY(200);
+        else player.setVelocityY(0);
+
+        if (cursors.left.isDown) player.setVelocityX(-200);
+        else if (cursors.right.isDown) player.setVelocityX(200);
+        else player.setVelocityX(0);
+
+        // Rotação do jogador em direção ao mouse
+        const pointer = this.input.activePointer;
+        const angle = Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
+        player.setRotation(angle);
+
+        // Atualizar zumbis
+        zombies.getChildren().forEach(zombie => {
+            const angleToPlayer = Phaser.Math.Angle.Between(zombie.x, zombie.y, player.x, player.y);
+            zombie.setVelocity(Math.cos(angleToPlayer) * 100, Math.sin(angleToPlayer) * 100);
+        });
+
+        // Colisão: balas e zumbis
+        this.physics.overlap(bullets, zombies, (bullet, zombie) => {
+            bullet.destroy();
+            zombie.destroy();
+            score += 10;
+            zombiesRemaining--;
+            scoreText.setText(`Score: ${score}`);
+            if (zombiesRemaining === 0) startNewHorde(this);
+        });
+
+        // Colisão: jogador e zumbis
+        this.physics.overlap(player, zombies, () => {
+            health -= 10;
+            healthText.setText(`Health: ${health}`);
+            if (health <= 0) gameOver(this);
+        });
+
+        // Colisão: jogador e cura
+        this.physics.overlap(player, healthItems, (player, healthItem) => {
+            health = Math.min(health + 20, 100);
+            healthItem.destroy();
+            healthText.setText(`Health: ${health}`);
+        });
+    }
+
+    function shootBullet() {
+        const now = Date.now();
+        if (now - lastBulletTime < 200) return; // Controle de tempo entre tiros
+        lastBulletTime = now;
+
+        const pointer = this.input.activePointer;
+        const angle = Phaser.Math.Angle.Between(player.x, player.y, pointer.x, pointer.y);
+        const bullet = bullets.create(player.x, player.y, 'bullet');
+        bullet.setVelocity(Math.cos(angle) * 400, Math.sin(angle) * 400);
+        bullet.setAngle((angle * 180) / Math.PI);
+    }
+
+    function startNewHorde(scene) {
+        horde++;
+        zombiesRemaining = horde * 5;
+        for (let i = 0; i < zombiesRemaining; i++) {
+            const x = Phaser.Math.Between(0, 800);
+            const y = Phaser.Math.Between(0, 600);
+            const zombie = zombies.create(x, y, 'zombie');
+            zombie.setCollideWorldBounds(true);
+        }
+
+        // Spawn de cura ocasional
+        if (Phaser.Math.Between(1, 3) === 1) {
+            const x = Phaser.Math.Between(50, 750);
+            const y = Phaser.Math.Between(50, 550);
+            const healthItem = healthItems.create(x, y, 'health');
+        }
+
+        hordeText.setText(`Horde: ${horde}`);
+    }
+
+    function gameOver(scene) {
+        scene.physics.pause();
+        scene.add.text(400, 300, 'GAME OVER', { fontSize: '50px', fill: '#ff0000' }).setOrigin(0.5);
+        setTimeout(() => location.reload(), 3000);
+    }
+</script>
+</body>
+</html>
